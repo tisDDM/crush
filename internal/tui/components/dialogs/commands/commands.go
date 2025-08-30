@@ -2,6 +2,7 @@ package commands
 
 import (
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/help"
 	"github.com/charmbracelet/bubbles/v2/key"
@@ -322,6 +323,60 @@ func (c *commandDialogCmp) defaultCommands() []Command {
 			})
 		}
 	}
+
+	// OpenAI/Azure: Set Reasoning Effort and Verbosity (only for can_reason models)
+	if agentCfg, ok := cfg.Agents["coder"]; ok {
+		providerCfg := cfg.GetProviderForModel(agentCfg.Model)
+		model := cfg.GetModelByType(agentCfg.Model)
+		if providerCfg != nil && model != nil &&
+			(model.CanReason && (providerCfg.Type == catwalk.TypeOpenAI || providerCfg.Type == catwalk.TypeAzure)) {
+
+			// helper to update SelectedModel and persist using the same mechanism/location as Anthropic Think
+			updateModel := func(updater func(s config.SelectedModel) config.SelectedModel) tea.Cmd {
+				sm := cfg.Models[agentCfg.Model]
+				sm = updater(sm)
+				_ = cfg.UpdatePreferredModel(agentCfg.Model, sm)
+				return util.CmdHandler(dialogs.CloseDialogMsg{})
+			}
+
+			// Reasoning Effort commands
+			for _, eff := range []string{"minimal", "low", "medium", "high"} {
+				eff := eff
+				title := "Set Reasoning Effort: " + strings.Title(eff)
+				desc := "Set reasoning effort to " + eff
+				commands = append(commands, Command{
+					ID:          "set_reasoning_effort_" + eff,
+					Title:       title,
+					Description: desc,
+					Handler: func(cmd Command) tea.Cmd {
+						return updateModel(func(s config.SelectedModel) config.SelectedModel {
+							s.ReasoningEffort = eff
+							return s
+						})
+					},
+				})
+			}
+
+			// Verbosity commands
+			for _, v := range []string{"low", "medium", "high"} {
+				v := v
+				title := "Set Verbosity: " + strings.Title(v)
+				desc := "Set verbosity level to " + v
+				commands = append(commands, Command{
+					ID:          "set_verbosity_" + v,
+					Title:       title,
+					Description: desc,
+					Handler: func(cmd Command) tea.Cmd {
+						return updateModel(func(s config.SelectedModel) config.SelectedModel {
+							s.Verbosity = v
+							return s
+						})
+					},
+				})
+			}
+		}
+	}
+
 	// Only show toggle compact mode command if window width is larger than compact breakpoint (90)
 	if c.wWidth > 120 && c.sessionID != "" {
 		commands = append(commands, Command{
