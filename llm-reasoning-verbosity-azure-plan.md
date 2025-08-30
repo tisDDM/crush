@@ -201,6 +201,20 @@ This PR fixes inconsistencies and aligns OpenAI and Azure:
 - Azure matches OpenAI behavior (headers/body/per-call options)
 - Model switch always resets the slot to defaults (no prompts)
 
+Examples of fixed issues:
+- Missing Reasoning Effort in requests while UI showed a default:
+  - Before: UI badge “Reasoning High” (from model default) but HTTP request contained no reasoning_effort when models.large.reasoning_effort was empty.
+  - After: If SelectedModel.ReasoningEffort is empty and can_reason = true, we send the model default (ReasoningEffort) in the request; UI and request are aligned.
+- Azure parity for extra headers/body and per-call options:
+  - Before: providers.azure.extra_headers/extra_body not applied; per-call options behaved differently vs. OpenAI.
+  - After: Azure now applies extra headers/body like OpenAI. Note: extra_body["verbosity"] is intentionally ignored to avoid split-brain configuration.
+- Verbosity not applied/not visible:
+  - Before: Verbosity neither injected into OpenAI/Azure requests nor visible in Sidebar.
+  - After: Verbosity is injected per-call (only when can_reason = true), with precedence SelectedModel.Verbosity > model default_verbosity. Sidebar shows the same effective value.
+- Selected vs. Catalog model inconsistencies:
+  - Before: Switching models could carry stale overrides, causing mismatches with model defaults.
+  - After: Model switch resets to defaults deterministically (MaxTokens, ReasoningEffort default, Verbosity via default_verbosity fallback, Think=false).
+
 Docs:
 - README: Add “Per-model defaults” (default_verbosity), precedence, and note that extra_body["verbosity"] is ignored
 
@@ -214,6 +228,7 @@ PR 2 Summary:
 - Adds TUI commands to set SelectedModel Reasoning Effort (minimal/low/medium/high) and Verbosity (low/medium/high) for can_reason models
 - Model switch always resets the slot to defaults (no prompts)
 - Persist in ~/.local/share/crush/crush.json; UI reflects changes immediately
+- Persistence uses the same mechanism and location as Anthropic’s “Think”: SelectedModel fields are written via config.UpdatePreferredModel(...) to the data config at ~/.local/share/crush/crush.json (no separate persistence layer).
 
 Shared Issue (optional follow-up):
 Unify default_verbosity in Catwalk model metadata
