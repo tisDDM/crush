@@ -1,237 +1,142 @@
-# Implementierungsplan: Reasoning-Effort, Verbosity, OpenAI/Azure-Parität und TUI-Unterstützung (vereinfachtes, konsistentes Design)
+# Combined PR Plan: Reasoning Effort & Verbosity Parity (OpenAI/Azure), can_reason Binding, Model Defaults, TUI Controls
 
-Ziele (KISS, konsistente Semantik)
-- Reasoning Effort und Verbosity werden identisch behandelt:
-  - Bindung an can_reason: Beide wirken nur, wenn das Modell reasoning-fähig ist.
-  - Vorrang/Reihenfolge: SelectedModel-Override > Model-Default > nichts.
-  - Request-Injektion: per-Call; UI (Sidebar) zeigt den effektiven Wert (Override, sonst Default).
-- Parität OpenAI/Azure: Gleiches Verhalten für beide Provider.
-- Anthropic: Unverändert; „Thinking“ (bool) bleibt separat.
-- Kein providers.extra_body für „verbosity“ (explizit gefiltert).
-- OOB-Default für Verbosity direkt am Modell in providers.<id>.models[].default_verbosity (enum: low|medium|high).
-- Modellwechsel: „Reset to defaults“ (keine Prompts).
+Kurzfassung
+- Ein PR, kleiner und review-freundlich, der alle Inkonsistenzen behebt und OpenAI/Azure paritätisch macht.
+- Reasoning Effort und Verbosity werden absolut identisch behandelt (inkl. can_reason).
+- Defaults kommen aus dem Katalog/der lokalen Provider-Modelldefinition (OOB), SelectedModel-Overrides haben Vorrang.
+- TUI-Commands (Effort/Verbosity) sind enthalten, Persistenz identisch zu Anthropic (SelectedModel in ~/.local/share/crush/crush.json).
+- Kein providers.extra_body["verbosity"] (explizit gefiltert).
 
-Dieser Plan ist für zwei PRs ausgelegt (PR 1: Funktional/Anzeige; PR 2: TUI/Persistenz).
+Warum ein einziger PR?
+- Repo ist High Frequency, ein PR reduziert Review-/Merge-Overhead.
+- Bei Beanstandung kann die TUI-Komponente (nur commands.go) gezielt zurückgebaut werden.
 
----
+Scope (in einem PR)
+- Config/Loader/Schema:
+  - Model.default_verbosity (enum: low|medium|high) in schema.json.
+  - ProviderConfig custom Unmarshal: liest providers.<id>.models[].default_verbosity und hält die Werte intern pro model.id (OOB, ohne Catwalk-PR).
+- Provider OpenAI & Azure:
+  - can_reason Binding für ReasoningEffort und Verbosity.
+  - Precedence: SelectedModel override > Model default > none.
+  - Per-Call Injektion; providers.extra_body["verbosity"] wird ignoriert.
+  - Azure-Client Parität bzgl. extra headers/body und per-call options.
+- UI (Sidebar):
+  - Anzeige Reasoning Effort (Selected vs. Default) und Verbosity (Selected vs. Default) nur wenn can_reason.
+- TUI:
+  - Commands: „Set Reasoning Effort“ (minimal/low/medium/high) und „Set Verbosity“ (low/medium/high), nur wenn can_reason und Provider ∈ {openai, azure}.
+  - Persistenz über config.UpdatePreferredModel(...) (SelectedModel.*) nach ~/.local/share/crush/crush.json – identisch zu Anthropic „Think“.
+  - Modellwechsel: „Reset to defaults“ (Effort=Default, Verbosity=Fallback auf default_verbosity, MaxTokens=Default, Think=false).
 
-## 0) Kontext (Kurzfassung)
+Semantik (final)
+- Gilt für OpenAI/Azure:
+  - Beide Felder nur, wenn can_reason==true.
+  - SelectedModel.{reasoning_effort|verbosity} > Model.{default_reasoning_effort|default_verbosity} > none.
+  - Request und UI zeigen denselben effektiven Wert.
+  - Kein providers.extra_body["verbosity"] (gefiltert).
+- Anthropic: unverändert (Think on/off).
 
-- Catwalk liefert bekannte Provider/Modelle. Crush lädt diese und mapt sie auf interne Provider/Modelle.
-- Beim Start: configureProviders() mergen Katalog und lokale Konfiguration; configureSelectedModels() setzt die Slots „large“/„small“.
-- Requests: Provider-Clients bauen die Parameter inkl. Reasoning/Verbosity (falls unterstützt) und senden.
-- UI (Sidebar): Zeigt aktuelle Slot-Einstellungen (Model, Reasoning/Thinking, Verbosity).
-
----
-
-## 1) Zielbild und Prinzipien (final)
-
-- Reasoning Effort und Verbosity identisch, mit can_reason-Gating.
-- Vorrang: SelectedModel.{reasoning_effort | verbosity} > Model-Default (Reasoning: default_reasoning_effort, Verbosity: default_verbosity) > nichts.
-- Request und UI nutzen denselben effektiven Wert.
-- Kein providers.extra_body["verbosity"].
-- Reset-on-switch: Beim Wechsel werden Slot-Werte deterministisch auf Defaults gesetzt.
-
----
-
-## 2) PR 1 – Funktional, Parität, Defaults und Anzeige
-
-### A) OpenAI/Azure: can_reason + Injektion + Defaults (identisch für Effort/Verbosity)
-
-- ReasoningEffort:
-  - Fallback auf model.DefaultReasoningEffort, wenn SelectedModel.ReasoningEffort leer und model.CanReason.
-- Verbosity:
-  - SelectedModel.Verbosity wird genutzt, wenn gesetzt und model.CanReason.
-  - Ist SelectedModel.Verbosity leer und model.CanReason: Fallback auf Modell-Default aus providers.<id>.models[].default_verbosity.
-  - Request-Injektion: option.WithJSONSet("verbosity", v) nur, wenn v != "" und model.CanReason.
-  - providers.extra_body["verbosity"] wird explizit herausgefiltert.
-
-Implementiert:
-- internal/llm/provider/openai.go
-  - can_reason-Gating und per-Call Injektion mit Fallback auf Model.default_verbosity.
-  - Filter in createOpenAIClient: extra_body["verbosity"] wird ignoriert.
-- internal/llm/provider/azure.go
-  - Filter für extra_body["verbosity"]; Calls laufen über openaiClient → Parität.
-
-### B) OOB-Default für Verbosity direkt am Modell
-
-- Schema: Model.default_verbosity (enum) ergänzt.
-- Loader: providers.<id>.models[] wird zusätzlich als Raw gelesen und default_verbosity intern pro model.id erfasst (keine public Overrides nötig).
-- Ergebnis: Lokale provider models[].default_verbosity funktioniert sofort OOB; keine Catwalk-Änderung erforderlich.
-
-Implementiert:
-- internal/config/config.go
-  - Internal map DefaultVerbosityByModel (json:"-") + Custom Unmarshal für ProviderConfig, das models[].default_verbosity ausliest.
-- internal/config/load.go
-  - Durchreichen der DefaultVerbosityByModel.
-- internal/tui/components/chat/sidebar/sidebar.go
-  - Anzeige-Fallback für Verbosity (SelectedModel.Verbosity oder DefaultVerbosityByModel), nur wenn can_reason.
-
-### C) Reset-on-Switch (Konsistenz)
-
-- Beim Wechsel (Slot):
-  - MaxTokens = model.DefaultMaxTokens
-  - ReasoningEffort = model.DefaultReasoningEffort (falls can_reason)
-  - Verbosity = "" (→ Fallback auf default_verbosity, falls can_reason)
-  - Think = false
-
-Implementiert:
-- internal/config/load.go: ReasoningEffort wird auf Default gesetzt, wenn nicht explizit; Verbosity bleibt leer (Fallback zur Laufzeit via Request/UI). TUI erzwingt in PR 2 den Reset beim Modellwechsel.
-
----
-
-## 3) PR 2 – TUI/Persistenz
-
-- Commands:
-  - „Set Reasoning Effort“ (minimal/low/medium/high) – nur sichtbar, wenn can_reason.
-  - „Set Verbosity“ (low/medium/high) – nur sichtbar, wenn can_reason.
-  - „Switch Model“ – erzwingt immer „reset to defaults“ (keine Prompts).
-- Persistenz:
-  - Änderungen an SelectedModel via config.UpdatePreferredModel(...), Ziel: ~/.local/share/crush/crush.json.
-
----
-
-## 4) Precedence & Zusammenspiel
-
-- Vorrang:
-  - SelectedModel.{reasoning_effort | verbosity} > Model-Defaults (default_reasoning_effort / default_verbosity) > nichts.
-- can_reason:
-  - Beide Felder gelten nur, wenn model.CanReason == true.
-- Kein providers.extra_body für „verbosity“.
-
----
-
-## 5) Tests, Verifikation, BC
-
-- Unit-/Manuelle Tests:
-  - Wenn SelectedModel.Verbosity leer und can_reason=true und default_verbosity gesetzt → Request enthält „verbosity“; UI zeigt denselben Wert.
-  - Wenn can_reason=false → kein „verbosity“ im Request/Anzeige.
-- Backwards-Compatibility:
-  - Keine Breaking Changes. Neue Option default_verbosity in models[] ist additiv.
-  - Sichtbare Änderung: providers.extra_body["verbosity"] greift nicht mehr (KISS; dokumentiert).
-
----
-
-## 6) „Richtiger“ Azure-Provider für Non-OAI-Kompatible Modelle (optional später)
-
-- Nicht Teil dieses Wurfs. Später separater Provider-Typ falls benötigt.
-
----
-
-## 7) Branch-/Commit- und Review-Strategie (aktualisiert)
-
-- Branches:
-  - pr1-reasoning-verbosity-parity-can-reason-and-model-defaults
-  - pr2-ui-toggles-effort-verbosity-reset
-- PR 1 Commits:
-  1) config.go/load.go: internal DefaultVerbosityByModel + Unmarshal + Durchreichen
-  2) openai.go/azure.go: can_reason-Gating + Fallback (Model.default_verbosity) + Filter extra_body["verbosity"]
-  3) sidebar.go: Anzeige Reasoning/Verbosity inkl. Fallback
-  4) schema.json: Model.default_verbosity (enum)
-  5) README: Kurze Doku (siehe unten)
-- PR 2 Commits:
-  1) commands.go: TUI Commands (Effort/Verbosity) + Switch Model => reset to defaults
-  2) README: Abschnitt zu TUI-Befehlen
-
----
-
-## 8) Akzeptanzkriterien
-
-- PR 1:
-  - Verbosity identisch zu Reasoning Effort (can_reason-Bindung, per-Call Injektion, effektive Anzeige)
-  - Verbosity-Default via providers.<id>.models[].default_verbosity
-  - providers.extra_body["verbosity"] wird ignoriert
-  - OpenAI/Azure verhalten sich identisch
-- PR 2:
-  - TUI-Commands setzen Effort/Verbosity; Modellwechsel setzt immer auf Defaults; UI/Requests spiegeln Werte
-
----
-
-## 9) Risiken & Mitigation
-
-- Verwechslung mit extra_body["verbosity"]:
-  - Mitigation: explizit gefiltert; README-Hinweis
-- Catwalk-Default:
-  - Sobald Catwalk default_verbosity liefert, greift es OOB (wir lesen es aus models[]); kein weiterer PR nötig
-
----
-
-## 10) Doku/README (Kurztext)
-
-- Configure per-model defaults:
-  ```json
-  {
-    "providers": {
-      "openai": {
-        "id": "openai",
-        "type": "openai",
-        "api_key": "$OPENAI_API_KEY",
-        "base_url": "$OPENAI_API_ENDPOINT",
-        "models": [
-          {
-            "id": "gpt-5",
-            "default_verbosity": "high"
-          }
-        ]
-      }
+Konfigurationsbeispiel (OOB, ohne Catwalk-PR)
+```json
+{
+  "$schema": "https://charm.land/crush.json",
+  "providers": {
+    "openai": {
+      "id": "openai",
+      "type": "openai",
+      "api_key": "$OPENAI_API_KEY",
+      "base_url": "$OPENAI_API_ENDPOINT",
+      "models": [
+        {
+          "id": "gpt-5",
+          "name": "GPT-5",
+          "context_window": 400000,
+          "default_max_tokens": 128000,
+          "can_reason": true,
+          "has_reasoning_efforts": true,
+          "default_reasoning_effort": "high",
+          "default_verbosity": "medium"
+        },
+        {
+          "id": "gpt-5-mini",
+          "name": "GPT-5 Mini",
+          "context_window": 400000,
+          "default_max_tokens": 128000,
+          "can_reason": true,
+          "has_reasoning_efforts": true,
+          "default_reasoning_effort": "high",
+          "default_verbosity": "medium"
+        }
+      ]
     }
-  }
-  ```
-- Precedence:
-  - SelectedModel.{reasoning_effort|verbosity} > model defaults > none (only when can_reason)
-- Note:
-  - providers.extra_body["verbosity"] is ignored to avoid split-brain configuration
-  - Model switch resets to defaults (no prompts)
+  },
+  "models": {
+    "large": { "provider": "openai", "model": "gpt-5" },
+    "small": { "provider": "openai", "model": "gpt-5-mini" }
+  },
+  "options": { "debug": true }
+}
+```
+Hinweise:
+- SelectedModel.{reasoning_effort|verbosity} kann optional gesetzt werden; ansonsten greifen die obigen Defaults.
+- providers.extra_body["verbosity"] wird ignoriert (nicht senden).
+- Modellwechsel setzt auf Defaults zurück.
 
----
+Beispiele behobener Fehler (Before → After)
+- Reasoning default im Request fehlte:
+  - Before: UI zeigte „Reasoning High“ (Default), der Request enthielt kein reasoning_effort, wenn Selected leer war.
+  - After: Wenn Selected leer und can_reason=true, wird default_reasoning_effort im Request gesetzt. UI == Request.
+- Azure-Parität:
+  - Before: extra_headers/extra_body bei Azure wurden nicht angewendet; per-call Options verhielten sich anders als OpenAI.
+  - After: Azure verhält sich analog zu OpenAI; extra_body["verbosity"] wird absichtlich ignoriert, um doppelte Quellen zu vermeiden.
+- Verbosity nicht injiziert/nicht sichtbar:
+  - Before: Verbosity wurde weder in Requests injiziert noch in der Sidebar angezeigt.
+  - After: Verbosity wird per-Call injiziert (nur can_reason) und in der Sidebar angezeigt – Precedence Selected > default_verbosity.
+- Selected vs. Catalog Inkonsistenz beim Modelwechsel:
+  - Before: Stale Overrides führten zu Mismatches bei Defaults.
+  - After: Slot-Reset auf Defaults (Effort/MaxTokens/Think, Verbosity via Fallback) macht Verhalten deterministisch.
 
-## Anhang – PR-Texte (englisch)
+Tests/Verifikation
+- Build/Tests grün: go build ./...; go test ./...
+- Debug-Logs (options.debug=true) zeigen:
+  - Top-Level "verbosity": "<level>" nur wenn can_reason.
+  - ReasoningEffort entsprechend SDK-Feld (enum) gesetzt.
+  - Keine „verbosity“ aus providers.extra_body.
+- Sidebar zeigt dieselben effektiven Werte wie der Request.
 
-PR 1 Title:
-Reasoning Effort & Verbosity parity (OpenAI/Azure), can_reason binding, per-model default_verbosity, and UI alignment
+Changelog (Kurz, Englisch)
+- Fix: Apply Reasoning Effort default in requests when SelectedModel is empty (UI and request aligned).
+- Add: Per-model default_verbosity (providers.<id>.models[].default_verbosity); OpenAI/Azure parity; can_reason binding for both.
+- Change: Ignore providers.extra_body["verbosity"] to avoid split-brain configuration.
+- Add: TUI commands to set Reasoning Effort and Verbosity; model switch resets to defaults.
 
-PR 1 Summary:
-This PR fixes inconsistencies and aligns OpenAI and Azure:
-- Reasoning Effort default is now applied in requests when SelectedModel is empty (UI and request are aligned).
-- Verbosity behaves identically to Reasoning Effort:
-  - Applies only when the model can_reason = true
-  - Precedence: SelectedModel override > per-model default_verbosity > none
-  - Injected per-call; sidebar shows the same effective value
-- Per-model defaults: default_verbosity is read from providers.<id>.models[].default_verbosity; no provider-wide extra_body
+Pull Request (English, final – single PR)
+Title
+Reasoning Effort & Verbosity parity (OpenAI/Azure), can_reason binding, per-model default_verbosity (OOB), TUI controls, and UI alignment
+
+Summary
+This PR fixes inconsistencies and aligns OpenAI and Azure. Reasoning Effort and Verbosity now behave identically:
+- Apply only when can_reason = true
+- Precedence: SelectedModel override > per-model defaults > none
+- Injected per call; sidebar shows the same effective value
+- Per-model defaults: default_verbosity read OOB from providers.<id>.models[] (no provider-wide extra_body)
 - Azure matches OpenAI behavior (headers/body/per-call options)
-- Model switch always resets the slot to defaults (no prompts)
+- TUI commands: set Reasoning Effort (minimal/low/medium/high) and Verbosity (low/medium/high)
+- Model switch resets the slot to defaults (no prompts)
 
-Examples of fixed issues:
-- Missing Reasoning Effort in requests while UI showed a default:
-  - Before: UI badge “Reasoning High” (from model default) but HTTP request contained no reasoning_effort when models.large.reasoning_effort was empty.
-  - After: If SelectedModel.ReasoningEffort is empty and can_reason = true, we send the model default (ReasoningEffort) in the request; UI and request are aligned.
-- Azure parity for extra headers/body and per-call options:
-  - Before: providers.azure.extra_headers/extra_body not applied; per-call options behaved differently vs. OpenAI.
-  - After: Azure now applies extra headers/body like OpenAI. Note: extra_body["verbosity"] is intentionally ignored to avoid split-brain configuration.
-- Verbosity not applied/not visible:
-  - Before: Verbosity neither injected into OpenAI/Azure requests nor visible in Sidebar.
-  - After: Verbosity is injected per-call (only when can_reason = true), with precedence SelectedModel.Verbosity > model default_verbosity. Sidebar shows the same effective value.
-- Selected vs. Catalog model inconsistencies:
-  - Before: Switching models could carry stale overrides, causing mismatches with model defaults.
-  - After: Model switch resets to defaults deterministically (MaxTokens, ReasoningEffort default, Verbosity via default_verbosity fallback, Think=false).
+Examples of fixed issues
+- Reasoning default missing in requests while UI showed a default → request now includes the default
+- Azure parity: extra headers/body + per-call options now symmetrical to OpenAI; extra_body["verbosity"] ignored by design
+- Verbosity was neither injected nor visible → now injected per call, with Selected > default_verbosity precedence; UI matches request
+- Selected vs. Catalog inconsistencies on model switch → forced reset to defaults (deterministic)
 
-Docs:
-- README: Add “Per-model defaults” (default_verbosity), precedence, and note that extra_body["verbosity"] is ignored
+Persistence
+Identical to Anthropic “Think”: SelectedModel fields are persisted via config.UpdatePreferredModel(...) to ~/.local/share/crush/crush.json. No separate persistence layer.
 
-BC:
-- No breaking changes; default_verbosity is additive and optional
+Out-of-scope
+Non-OpenAI-compatible Azure endpoints (would require a dedicated provider type).
 
-PR 2 Title:
-TUI Commands: Set Reasoning Effort and Verbosity; model switch resets to defaults
+Rollback
+- If required to split PRs, TUI can be reverted in a single file (internal/tui/components/dialogs/commands/commands.go); the core fixes remain intact.
 
-PR 2 Summary:
-- Adds TUI commands to set SelectedModel Reasoning Effort (minimal/low/medium/high) and Verbosity (low/medium/high) for can_reason models
-- Model switch always resets the slot to defaults (no prompts)
-- Persist in ~/.local/share/crush/crush.json; UI reflects changes immediately
-- Persistence uses the same mechanism and location as Anthropic’s “Think”: SelectedModel fields are written via config.UpdatePreferredModel(...) to the data config at ~/.local/share/crush/crush.json (no separate persistence layer).
-
-Shared Issue (optional follow-up):
-Unify default_verbosity in Catwalk model metadata
-- Crush already reads default_verbosity from local provider models[] OOB
-- When Catwalk adds default_verbosity, it will be picked up directly
-- Keep precedence: SelectedModel > per-model defaults
+Optional follow-up (English)
+Unify default_verbosity in Catwalk model metadata. Crush already reads default_verbosity from local provider models[] OOB; once Catwalk supplies it, behavior is unchanged.
