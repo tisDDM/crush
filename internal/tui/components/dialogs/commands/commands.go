@@ -133,6 +133,10 @@ func (c *commandDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return c, nil // No item selected, do nothing
 			}
 			command := (*selectedItem).Value()
+			// Keep dialog open for cycling commands to allow rapid toggling
+			if command.ID == "cycle_reasoning_effort" || command.ID == "cycle_verbosity" {
+				return c, command.Handler(command)
+			}
 			return c, tea.Sequence(
 				util.CmdHandler(dialogs.CloseDialogMsg{}),
 				command.Handler(command),
@@ -213,6 +217,12 @@ func (c *commandDialogCmp) SetCommandType(commandType int) tea.Cmd {
 		commands = c.userCommands
 	}
 
+	// Preserve current selection across refreshes
+	selectedID := ""
+	if sel := c.commandList.SelectedItem(); sel != nil {
+		selectedID = (*sel).ID()
+	}
+
 	commandItems := []list.CompletionItem[Command]{}
 	for _, cmd := range commands {
 		opts := []list.CompletionItemOption{
@@ -226,7 +236,12 @@ func (c *commandDialogCmp) SetCommandType(commandType int) tea.Cmd {
 		}
 		commandItems = append(commandItems, list.NewCompletionItem(cmd.Title, cmd, opts...))
 	}
-	return c.commandList.SetItems(commandItems)
+	setCmd := c.commandList.SetItems(commandItems)
+	if selectedID != "" {
+		selCmd := c.commandList.SetSelected(selectedID)
+		return tea.Batch(setCmd, selCmd)
+	}
+	return setCmd
 }
 
 func (c *commandDialogCmp) listHeight() int {
