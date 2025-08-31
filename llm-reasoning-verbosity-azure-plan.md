@@ -27,7 +27,7 @@ Scope (in einem PR)
   - Commands: „Cycle Reasoning Effort (Current: X)“ und „Cycle Verbosity (Current: Y)“ statt 7 Einträgen. Reihenfolge: Effort minimal → low → medium → high → off; Verbosity low → medium → high → off. Sichtbar nur, wenn can_reason und Provider ∈ {openai, azure}.
   - Das Command-Window bleibt beim Toggeln geöffnet (kein Close); Labels aktualisieren sich live.
   - Persistenz über config.UpdatePreferredModel(...) (SelectedModel.*) nach ~/.local/share/crush/crush.json – identisch zu Anthropic „Think“.
-  - Modellwechsel: „Reset to defaults“ (Effort=Default, Verbosity=Fallback auf default_verbosity, MaxTokens=Default, Think=false).
+  - Modellwechsel: „Reset to defaults“ (Effort=Default, Verbosity=Fallback auf default_verbosity, MaxTokens=Default, Think=false) – explizit im TUI Switch-Flow implementiert.
 
 Semantik (final)
 - Gilt für OpenAI/Azure:
@@ -99,6 +99,7 @@ Beispiele behobener Fehler (Before → After)
 
 Tests/Verifikation
 - Build/Tests grün: go build ./...; go test ./...
+- ModelSelectedMsg setzt SelectedModel-Felder explizit zurück (ReasoningEffort="", Verbosity="", Think=false, MaxTokens=0) – deterministischer Reset.
 - Debug-Logs (options.debug=true) zeigen:
   - Top-Level "verbosity": "<level>" nur wenn can_reason.
   - ReasoningEffort entsprechend SDK-Feld (enum) gesetzt.
