@@ -20,6 +20,7 @@ Scope (in einem PR)
   - Precedence: SelectedModel override > Model default > none.
   - Per-Call Injektion; providers.extra_body["verbosity"] wird ignoriert.
   - Azure-Client Parität bzgl. extra headers/body und per-call options.
+  - Prompt-Mapping: Azure nutzt jetzt denselben Coder-Prompt wie OpenAI (v2.md) statt anthropic.md (vorheriger Gap).
 - UI (Sidebar):
   - Anzeige Reasoning Effort (Selected vs. Default) und Verbosity (Selected vs. Default) nur wenn can_reason.
 - TUI:
@@ -86,9 +87,9 @@ Beispiele behobener Fehler (Before → After)
 - Reasoning default im Request fehlte:
   - Before: UI zeigte „Reasoning High“ (Default), der Request enthielt kein reasoning_effort, wenn Selected leer war.
   - After: Wenn Selected leer und can_reason=true, wird default_reasoning_effort im Request gesetzt. UI == Request.
-- Azure-Parität:
-  - Before: extra_headers/extra_body bei Azure wurden nicht angewendet; per-call Options verhielten sich anders als OpenAI.
-  - After: Azure verhält sich analog zu OpenAI; extra_body["verbosity"] wird absichtlich ignoriert, um doppelte Quellen zu vermeiden.
+- Azure-Parität & Prompt:
+  - Before: extra_headers/extra_body bei Azure wurden nicht angewendet; per-call Options verhielten sich anders als OpenAI. Zudem nutzte Azure anthropic.md statt v2.md.
+  - After: Azure verhält sich analog zu OpenAI; extra_body["verbosity"] wird absichtlich ignoriert, um doppelte Quellen zu vermeiden. Azure verwendet jetzt denselben Prompt wie OpenAI (v2.md).
 - Verbosity nicht injiziert/nicht sichtbar:
   - Before: Verbosity wurde weder in Requests injiziert noch in der Sidebar angezeigt.
   - After: Verbosity wird per-Call injiziert (nur can_reason) und in der Sidebar angezeigt – Precedence Selected > default_verbosity.
@@ -128,9 +129,9 @@ Examples of fixed issues
 - Reasoning Effort default missing in requests while UI showed a default:
   - Before: UI displayed “Reasoning High” (from model default), but request did not include reasoning_effort when SelectedModel.ReasoningEffort was empty.
   - After: If Selected is empty and can_reason = true, the request includes the model default (ReasoningEffort). UI and request are aligned.
-- Azure parity and request customization:
-  - Before: Azure did not apply provider extras (headers/body) and per-call options symmetrically to OpenAI; features depending on request customization (e.g., verbosity via per-call options) were ineffective. In addition, reasoning_effort suffered from the same default-missing behavior as OpenAI.
-  - After: Azure now mirrors OpenAI for extras and per-call options; and reasoning_effort default is applied in requests (when Selected is empty and can_reason = true), ensuring consistent behavior across providers.
+- Azure parity, prompt, and request customization:
+  - Before: Azure did not apply provider extras (headers/body) and per-call options symmetrically to OpenAI; features depending on request customization (e.g., verbosity via per-call options) were ineffective. In addition, reasoning_effort suffered from the same default-missing behavior as OpenAI. Also, Azure used anthropic.md instead of v2.md for the coder prompt.
+  - After: Azure now mirrors OpenAI for extras and per-call options; and reasoning_effort default is applied in requests (when Selected is empty and can_reason = true). Azure also uses the same coder prompt (v2.md) as OpenAI, ensuring consistent behavior and guidance across providers.
 - Verbosity was neither injected nor visible:
   - Before: No request injection and no Sidebar badge.
   - After: Injected per call (only when can_reason), with precedence Selected > default_verbosity; Sidebar shows the same effective value.
