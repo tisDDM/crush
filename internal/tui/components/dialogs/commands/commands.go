@@ -324,56 +324,78 @@ func (c *commandDialogCmp) defaultCommands() []Command {
 		}
 	}
 
-	// OpenAI/Azure: Set Reasoning Effort and Verbosity (only for can_reason models)
+	// OpenAI/Azure: Cycle Reasoning Effort and Verbosity (only for can_reason models)
 	if agentCfg, ok := cfg.Agents["coder"]; ok {
 		providerCfg := cfg.GetProviderForModel(agentCfg.Model)
 		model := cfg.GetModelByType(agentCfg.Model)
 		if providerCfg != nil && model != nil &&
 			(model.CanReason && (providerCfg.Type == catwalk.TypeOpenAI || providerCfg.Type == catwalk.TypeAzure)) {
 
-			// helper to update SelectedModel and persist using the same mechanism/location as Anthropic Think
+			// Persist SelectedModel and refresh the command list; keep dialog open
 			updateModel := func(updater func(s config.SelectedModel) config.SelectedModel) tea.Cmd {
 				sm := cfg.Models[agentCfg.Model]
 				sm = updater(sm)
 				_ = cfg.UpdatePreferredModel(agentCfg.Model, sm)
-				return util.CmdHandler(dialogs.CloseDialogMsg{})
+				// Refresh to update "Current: ..." labels without closing the dialog
+				return c.SetCommandType(c.commandType)
 			}
 
-			// Reasoning Effort commands
-			for _, eff := range []string{"minimal", "low", "medium", "high"} {
-				eff := eff
-				title := "Set Reasoning Effort: " + strings.Title(eff)
-				desc := "Set reasoning effort to " + eff
-				commands = append(commands, Command{
-					ID:          "set_reasoning_effort_" + eff,
-					Title:       title,
-					Description: desc,
-					Handler: func(cmd Command) tea.Cmd {
-						return updateModel(func(s config.SelectedModel) config.SelectedModel {
-							s.ReasoningEffort = eff
-							return s
-						})
-					},
-				})
+			cycleEffort := func(cur string) string {
+				order := []string{"minimal", "low", "medium", "high", ""} // "" means off (use default)
+				idx := 0
+				for i, v := range order {
+					if v == cur {
+						idx = i
+						break
+					}
+				}
+				return order[(idx+1)%len(order)]
+			}
+			cycleVerb := func(cur string) string {
+				order := []string{"low", "medium", "high", ""} // "" means off (use default)
+				idx := 0
+				for i, v := range order {
+					if v == cur {
+						idx = i
+						break
+					}
+				}
+				return order[(idx+1)%len(order)]
 			}
 
-			// Verbosity commands
-			for _, v := range []string{"low", "medium", "high"} {
-				v := v
-				title := "Set Verbosity: " + strings.Title(v)
-				desc := "Set verbosity level to " + v
-				commands = append(commands, Command{
-					ID:          "set_verbosity_" + v,
-					Title:       title,
-					Description: desc,
-					Handler: func(cmd Command) tea.Cmd {
-						return updateModel(func(s config.SelectedModel) config.SelectedModel {
-							s.Verbosity = v
-							return s
-						})
-					},
-				})
+			curEff := cfg.Models[agentCfg.Model].ReasoningEffort
+			curEffTitle := curEff
+			if curEffTitle == "" {
+				curEffTitle = "off"
 			}
+			commands = append(commands, Command{
+				ID:          "cycle_reasoning_effort",
+				Title:       "Cycle Reasoning Effort (Current: " + strings.Title(curEffTitle) + ")",
+				Description: "Cycle reasoning effort: minimal → low → medium → high → off",
+				Handler: func(cmd Command) tea.Cmd {
+					return updateModel(func(s config.SelectedModel) config.SelectedModel {
+						s.ReasoningEffort = cycleEffort(s.ReasoningEffort)
+						return s
+					})
+				},
+			})
+
+			curVerb := cfg.Models[agentCfg.Model].Verbosity
+			curVerbTitle := curVerb
+			if curVerbTitle == "" {
+				curVerbTitle = "off"
+			}
+			commands = append(commands, Command{
+				ID:          "cycle_verbosity",
+				Title:       "Cycle Verbosity (Current: " + strings.Title(curVerbTitle) + ")",
+				Description: "Cycle verbosity: low → medium → high → off",
+				Handler: func(cmd Command) tea.Cmd {
+					return updateModel(func(s config.SelectedModel) config.SelectedModel {
+						s.Verbosity = cycleVerb(s.Verbosity)
+						return s
+					})
+				},
+			})
 		}
 	}
 

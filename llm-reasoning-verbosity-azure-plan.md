@@ -23,7 +23,8 @@ Scope (in einem PR)
 - UI (Sidebar):
   - Anzeige Reasoning Effort (Selected vs. Default) und Verbosity (Selected vs. Default) nur wenn can_reason.
 - TUI:
-  - Commands: „Set Reasoning Effort“ (minimal/low/medium/high) und „Set Verbosity“ (low/medium/high), nur wenn can_reason und Provider ∈ {openai, azure}.
+  - Commands: „Cycle Reasoning Effort (Current: X)“ und „Cycle Verbosity (Current: Y)“ statt 7 Einträgen. Reihenfolge: Effort minimal → low → medium → high → off; Verbosity low → medium → high → off. Sichtbar nur, wenn can_reason und Provider ∈ {openai, azure}.
+  - Das Command-Window bleibt beim Toggeln geöffnet (kein Close); Labels aktualisieren sich live.
   - Persistenz über config.UpdatePreferredModel(...) (SelectedModel.*) nach ~/.local/share/crush/crush.json – identisch zu Anthropic „Think“.
   - Modellwechsel: „Reset to defaults“ (Effort=Default, Verbosity=Fallback auf default_verbosity, MaxTokens=Default, Think=false).
 
@@ -124,16 +125,27 @@ This PR fixes inconsistencies and aligns OpenAI and Azure. Reasoning Effort and 
 - Model switch resets the slot to defaults (no prompts)
 
 Examples of fixed issues
-- Reasoning default missing in requests while UI showed a default → request now includes the default
-- Azure parity: extra headers/body + per-call options now symmetrical to OpenAI; extra_body["verbosity"] ignored by design
-- Verbosity was neither injected nor visible → now injected per call, with Selected > default_verbosity precedence; UI matches request
-- Selected vs. Catalog inconsistencies on model switch → forced reset to defaults (deterministic)
+- Reasoning Effort default missing in requests while UI showed a default:
+  - Before: UI displayed “Reasoning High” (from model default), but request did not include reasoning_effort when SelectedModel.ReasoningEffort was empty.
+  - After: If Selected is empty and can_reason = true, the request includes the model default (ReasoningEffort). UI and request are aligned.
+- Azure parity and request customization:
+  - Before: Azure did not apply provider extras (headers/body) and per-call options symmetrically to OpenAI; features depending on request customization (e.g., verbosity via per-call options) were ineffective. In addition, reasoning_effort suffered from the same default-missing behavior as OpenAI.
+  - After: Azure now mirrors OpenAI for extras and per-call options; and reasoning_effort default is applied in requests (when Selected is empty and can_reason = true), ensuring consistent behavior across providers.
+- Verbosity was neither injected nor visible:
+  - Before: No request injection and no Sidebar badge.
+  - After: Injected per call (only when can_reason), with precedence Selected > default_verbosity; Sidebar shows the same effective value.
+- Selected vs. Catalog inconsistencies on model switch:
+  - Before: Stale overrides caused mismatches with model defaults.
+  - After: Forced reset to defaults (Effort/MaxTokens/Think; Verbosity via default_verbosity fallback) yields deterministic behavior.
 
 Persistence
 Identical to Anthropic “Think”: SelectedModel fields are persisted via config.UpdatePreferredModel(...) to ~/.local/share/crush/crush.json. No separate persistence layer.
 
 Out-of-scope
 Non-OpenAI-compatible Azure endpoints (would require a dedicated provider type).
+
+Submission note
+- This plan file is maintained internally for review and is not part of the submitted PR. It will be removed from the PR diff prior to opening.
 
 Rollback
 - If required to split PRs, TUI can be reverted in a single file (internal/tui/components/dialogs/commands/commands.go); the core fixes remain intact.
