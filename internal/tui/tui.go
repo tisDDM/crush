@@ -197,7 +197,7 @@ func (a *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, util.ReportWarn("Agent is busy, please wait...")
 		}
 
-		// Reset on switch: deterministische Defaults (Selected-Overrides löschen)
+		// Reset on switch: deterministic defaults (clear SelectedModel overrides)
 		modelToSet := msg.Model
 		modelToSet.ReasoningEffort = ""
 		modelToSet.Verbosity = ""
