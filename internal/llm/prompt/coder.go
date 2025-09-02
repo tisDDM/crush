@@ -22,6 +22,9 @@ func CoderPrompt(p string, contextFiles ...string) string {
 	case string(catwalk.InferenceProviderOpenAI):
 		// seems to behave better
 		basePrompt = string(coderV2Prompt)
+	case string(catwalk.InferenceProviderAzure):
+		// Use the same coder prompt as OpenAI for Azure (v2.md) to keep behavior consistent
+		basePrompt = string(coderV2Prompt)
 	case string(catwalk.InferenceProviderGemini):
 		basePrompt = string(geminiCoderPrompt)
 	}
