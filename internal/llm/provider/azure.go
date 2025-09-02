@@ -32,7 +32,7 @@ func newAzureClient(opts providerClientOptions) AzureClient {
 	}
 
 	reqOpts = append(reqOpts, azure.WithAPIKey(opts.apiKey))
-	// Parität zu OpenAI: apply extra headers/body; ignore provider-level "verbosity"
+	// Parity with OpenAI: apply extra headers/body; ignore provider-level "verbosity"
 	for key, value := range opts.extraHeaders {
 		reqOpts = append(reqOpts, option.WithHeader(key, value))
 	}
