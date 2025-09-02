@@ -224,7 +224,12 @@ func (o *openaiClient) preparedParams(messages []openai.ChatCompletionMessagePar
 		modelConfig = cfg.Models[config.SelectedModelTypeSmall]
 	}
 
+	// Fallback: Wenn Selected leer ist und das Modell Reasoning unterstützt,
+	// verwende den Default aus dem Modellkatalog (UI und Request bleiben konsistent).
 	reasoningEffort := modelConfig.ReasoningEffort
+	if reasoningEffort == "" && model.CanReason {
+		reasoningEffort = model.DefaultReasoningEffort
+	}
 
 	params := openai.ChatCompletionNewParams{
 		Model:    openai.ChatModel(model.ID),
