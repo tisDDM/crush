@@ -563,13 +563,23 @@ func (s *sidebarCmp) currentModelBlock() string {
 	if model.CanReason {
 		reasoningInfoStyle := t.S().Subtle.PaddingLeft(2)
 		switch modelProvider.Type {
-		case catwalk.TypeOpenAI:
+		case catwalk.TypeOpenAI, catwalk.TypeAzure:
 			reasoningEffort := model.DefaultReasoningEffort
 			if selectedModel.ReasoningEffort != "" {
 				reasoningEffort = selectedModel.ReasoningEffort
 			}
 			formatter := cases.Title(language.English, cases.NoLower)
 			parts = append(parts, reasoningInfoStyle.Render(formatter.String(fmt.Sprintf("Reasoning %s", reasoningEffort))))
+			// Verbosity (Selected > per-model default)
+			verbosity := selectedModel.Verbosity
+			if verbosity == "" && modelProvider.DefaultVerbosityByModel != nil {
+				if dv, ok := modelProvider.DefaultVerbosityByModel[model.ID]; ok && dv != "" {
+					verbosity = dv
+				}
+			}
+			if verbosity != "" {
+				parts = append(parts, reasoningInfoStyle.Render(formatter.String(fmt.Sprintf("Verbosity %s", verbosity))))
+			}
 		case catwalk.TypeAnthropic:
 			formatter := cases.Title(language.English, cases.NoLower)
 			if selectedModel.Think {

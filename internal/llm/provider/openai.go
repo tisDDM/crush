@@ -267,9 +267,28 @@ func (o *openaiClient) send(ctx context.Context, messages []message.Message, too
 	attempts := 0
 	for {
 		attempts++
+		// Optional per-call options: inject "verbosity" only for reasoning-capable models.
+		reqOpts := []option.RequestOption{}
+		cfg := config.Get()
+		model := o.providerOptions.model(o.providerOptions.modelType)
+		if model.CanReason {
+			v := cfg.Models[o.providerOptions.modelType].Verbosity
+			if v == "" {
+				if prov := cfg.GetProviderForModel(o.providerOptions.modelType); prov != nil && prov.DefaultVerbosityByModel != nil {
+					if dv, ok := prov.DefaultVerbosityByModel[model.ID]; ok {
+						v = dv
+					}
+				}
+			}
+			if v != "" {
+				reqOpts = append(reqOpts, option.WithJSONSet("verbosity", v))
+			}
+		}
+
 		openaiResponse, err := o.client.Chat.Completions.New(
 			ctx,
 			params,
+			reqOpts...,
 		)
 		// If there is an error we are going to see if we can retry the call
 		if err != nil {
@@ -330,9 +349,28 @@ func (o *openaiClient) stream(ctx context.Context, messages []message.Message, t
 			if len(params.Tools) == 0 {
 				params.Tools = nil
 			}
+			// Optional per-call options: inject "verbosity" only for reasoning-capable models.
+			reqOpts := []option.RequestOption{}
+			cfg := config.Get()
+			model := o.providerOptions.model(o.providerOptions.modelType)
+			if model.CanReason {
+				v := cfg.Models[o.providerOptions.modelType].Verbosity
+				if v == "" {
+					if prov := cfg.GetProviderForModel(o.providerOptions.modelType); prov != nil && prov.DefaultVerbosityByModel != nil {
+						if dv, ok := prov.DefaultVerbosityByModel[model.ID]; ok {
+							v = dv
+						}
+					}
+				}
+				if v != "" {
+					reqOpts = append(reqOpts, option.WithJSONSet("verbosity", v))
+				}
+			}
+
 			openaiStream := o.client.Chat.Completions.NewStreaming(
 				ctx,
 				params,
+				reqOpts...,
 			)
 
 			acc := openai.ChatCompletionAccumulator{}

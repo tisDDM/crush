@@ -214,6 +214,10 @@
         },
         "supports_attachments": {
           "type": "boolean"
+        },
+        "default_verbosity": {
+          "type": "string",
+          "description": "Default verbosity for models that support it"
         }
       },
       "additionalProperties": false,
@@ -391,6 +395,15 @@
             "high"
           ],
           "description": "Reasoning effort level for OpenAI models that support it"
+        },
+        "verbosity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "description": "Verbosity level for models that support it"
         },
         "max_tokens": {
           "type": "integer",
