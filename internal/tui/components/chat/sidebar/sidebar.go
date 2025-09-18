@@ -563,7 +563,7 @@ func (s *sidebarCmp) currentModelBlock() string {
 	if model.CanReason {
 		reasoningInfoStyle := t.S().Subtle.PaddingLeft(2)
 		switch modelProvider.Type {
-		case catwalk.TypeOpenAI:
+		case catwalk.TypeOpenAI, catwalk.TypeAzure:
 			reasoningEffort := model.DefaultReasoningEffort
 			if selectedModel.ReasoningEffort != "" {
 				reasoningEffort = selectedModel.ReasoningEffort

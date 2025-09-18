@@ -564,7 +564,7 @@ func (p *chatPage) openReasoningDialog() tea.Cmd {
 		providerCfg := cfg.GetProviderForModel(agentCfg.Model)
 
 		if providerCfg != nil && model != nil &&
-			providerCfg.Type == catwalk.TypeOpenAI && model.HasReasoningEffort {
+			(providerCfg.Type == catwalk.TypeOpenAI || providerCfg.Type == catwalk.TypeAzure) && model.HasReasoningEffort {
 			// Return the OpenDialogMsg directly so it bubbles up to the main TUI
 			return dialogs.OpenDialogMsg{
 				Model: reasoning.NewReasoningDialog(),

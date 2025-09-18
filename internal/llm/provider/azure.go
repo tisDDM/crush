@@ -30,6 +30,15 @@ func newAzureClient(opts providerClientOptions) AzureClient {
 	}
 
 	reqOpts = append(reqOpts, azure.WithAPIKey(opts.apiKey))
+
+	for key, value := range opts.extraHeaders {
+		reqOpts = append(reqOpts, option.WithHeader(key, value))
+	}
+
+	for extraKey, extraValue := range opts.extraBody {
+		reqOpts = append(reqOpts, option.WithJSONSet(extraKey, extraValue))
+	}
+
 	base := &openaiClient{
 		providerOptions: opts,
 		client:          openai.NewClient(reqOpts...),
