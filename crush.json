@@ -1,8 +1,31 @@
 {
   "$schema": "https://charm.land/crush.json",
-  "lsp": {
-    "Go": {
-      "command": "gopls"
+  "providers": {
+    "azure-low": {
+      "name": "Azure OpenAI (low)",
+      "type": "azure",
+      "base_url": "$(echo $AZURE_OPENAI_API_ENDPOINT)",
+      "api_key": "$(echo $AZURE_OPENAI_API_KEY)",
+      "extra_body": { "verbosity": "low" },
+      "models": [
+        { "id": "gpt-5", "name": "GPT-5" },
+        { "id": "gpt-5-mini", "name": "GPT-5 Mini" }
+      ]
+    },
+    "azure-high": {
+      "name": "Azure OpenAI (high)",
+      "type": "azure",
+      "base_url": "$(echo $AZURE_OPENAI_API_ENDPOINT)",
+      "api_key": "$(echo $AZURE_OPENAI_API_KEY)",
+      "extra_body": { "verbosity": "high" },
+      "models": [
+        { "id": "gpt-5", "name": "GPT-5" },
+        { "id": "gpt-5-mini", "name": "GPT-5 Mini" }
+      ]
     }
+  },
+  "models": {
+    "large": { "provider": "azure-high", "model": "gpt-5" },
+    "small": { "provider": "azure-low", "model": "gpt-5-mini" }
   }
 }
