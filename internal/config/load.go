@@ -289,6 +289,8 @@ func (c *Config) configureProviders(env env.Env, resolver VariableResolver, know
 		apiKey, err := resolver.ResolveValue(providerConfig.APIKey)
 		if apiKey == "" || err != nil {
 			slog.Warn("Provider is missing API key, this might be OK for local providers", "provider", id)
+		} else {
+			providerConfig.APIKey = apiKey
 		}
 		baseURL, err := resolver.ResolveValue(providerConfig.BaseURL)
 		if baseURL == "" || err != nil {
@@ -296,6 +298,7 @@ func (c *Config) configureProviders(env env.Env, resolver VariableResolver, know
 			c.Providers.Del(id)
 			continue
 		}
+		providerConfig.BaseURL = baseURL
 
 		c.Providers.Set(id, providerConfig)
 	}

@@ -16,18 +16,32 @@ import (
 
 func CoderPrompt(p string, contextFiles ...string) string {
 	var basePrompt string
+	useV2 := false
 
 	basePrompt = string(anthropicCoderPrompt)
 	switch p {
 	case string(catwalk.InferenceProviderOpenAI):
 		basePrompt = string(coderV2Prompt)
+		useV2 = true
 	case string(catwalk.InferenceProviderAzure):
 		basePrompt = string(coderV2Prompt)
+		useV2 = true
 	case string(catwalk.InferenceProviderGemini):
 		basePrompt = string(geminiCoderPrompt)
 	}
 	if ok, _ := strconv.ParseBool(os.Getenv("CRUSH_CODER_V2")); ok {
 		basePrompt = string(coderV2Prompt)
+		useV2 = true
+	}
+	if useV2 {
+		if fp := os.Getenv("CRUSH_CODER_PROMPT_FILE"); fp != "" {
+			if !filepath.IsAbs(fp) {
+				fp = filepath.Join(config.Get().WorkingDir(), fp)
+			}
+			if b, err := os.ReadFile(fp); err == nil {
+				basePrompt = string(b)
+			}
+		}
 	}
 	envInfo := getEnvironmentInfo()
 
